@@ -23,14 +23,48 @@ COPY letta-code-version.txt /tmp/letta-code-version.txt
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y git python3 curl wget jq nodejs make g++; \
+    apt-get install -y git python3 curl wget jq nodejs make g++ unzip; \
     version="${LETTA_CODE_VERSION:-$(cat /tmp/letta-code-version.txt)}"; \
     bun install -g "@letta-ai/letta-code@${version}" "npm@10"; \
     apt-get purge -y make g++; \
     apt-get autoremove -y; \
     rm -rf /var/lib/apt/lists/*
 
+# Agent toolchain: GitHub, Supabase, and Vercel CLIs baked into the image.
+# Runtime installs (e.g. via brew) land on the ephemeral overlay and are wiped
+# on every container restart; baking them here makes them durable and keeps the
+# small /root volume free. Auth/secrets for these stay out of the image and are
+# provided at runtime (Letta /secret or env vars).
+RUN set -eux; \
+    # GitHub CLI (official apt repo)
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg; \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update; \
+    apt-get install -y gh; \
+    rm -rf /var/lib/apt/lists/*; \
+    # Supabase CLI (release tarball -> /usr/local/bin)
+    arch="$(dpkg --print-architecture)"; \
+    curl -fsSL "https://github.com/supabase/cli/releases/latest/download/supabase_linux_${arch}.tar.gz" \
+      | tar -xz -C /usr/local/bin supabase; \
+    # Vercel CLI (bun global -> same bin dir as letta, /usr/local/bin)
+    bun install -g vercel; \
+    # Composio CLI. Its installer drops the binary + helper files in
+    # $HOME/.composio; redirect HOME to /opt so it lands OUTSIDE /root (the
+    # volume mounts at /root and would otherwise mask it), then symlink onto
+    # PATH. Runtime config/session still uses $HOME/.composio (=/root/.composio,
+    # on the volume) so a one-time `composio login` persists across restarts.
+    HOME=/opt sh -c 'curl -fsSL https://composio.dev/install | bash'; \
+    ln -sf /opt/.composio/composio /usr/local/bin/composio; \
+    # sanity checks (fail the build if any CLI is missing from PATH)
+    gh --version; supabase --version; vercel --version; composio --version
+
 ENV ENV_NAME="cloud"
 ENV LETTA_RESTORE_ENABLED_CHANNELS="1"
 
-CMD ["sh", "-c", "letta server --env-name \"$ENV_NAME\" --debug"]
+# Run the agent's shell work from a volume-backed dir so files persist across
+# restarts. The volume mounts at /root, masking any build-time dir, so the
+# workspace is created at runtime. ~/.letta state already persists via /root.
+CMD ["sh", "-c", "mkdir -p /root/workspace && cd /root/workspace && letta server --env-name \"$ENV_NAME\" --debug"]
