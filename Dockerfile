@@ -30,6 +30,12 @@ RUN set -eux; \
     apt-get autoremove -y; \
     rm -rf /var/lib/apt/lists/*
 
+# Pinned CLI versions (bumped automatically by Renovate — see renovate.json).
+# renovate: datasource=github-releases depName=supabase/cli
+ARG SUPABASE_VERSION=2.108.0
+# renovate: datasource=npm depName=vercel
+ARG VERCEL_VERSION=54.18.2
+
 # Agent toolchain: GitHub, Supabase, and Vercel CLIs baked into the image.
 # Runtime installs (e.g. via brew) land on the ephemeral overlay and are wiped
 # on every container restart; baking them here makes them durable and keeps the
@@ -45,17 +51,25 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y gh; \
     rm -rf /var/lib/apt/lists/*; \
-    # Supabase CLI (release tarball -> /usr/local/bin)
+    # Supabase CLI (pinned release, SHA256-verified against the release checksums)
     arch="$(dpkg --print-architecture)"; \
-    curl -fsSL "https://github.com/supabase/cli/releases/latest/download/supabase_linux_${arch}.tar.gz" \
-      | tar -xz -C /usr/local/bin supabase; \
-    # Vercel CLI (bun global -> same bin dir as letta, /usr/local/bin)
-    bun install -g vercel; \
+    sb_base="https://github.com/supabase/cli/releases/download/v${SUPABASE_VERSION}"; \
+    sb_tar="supabase_${SUPABASE_VERSION}_linux_${arch}.tar.gz"; \
+    curl -fsSL -o "/tmp/${sb_tar}" "${sb_base}/${sb_tar}"; \
+    curl -fsSL -o /tmp/supabase_checksums.txt "${sb_base}/checksums.txt"; \
+    (cd /tmp && grep " ${sb_tar}\$" supabase_checksums.txt | sha256sum -c -); \
+    tar -xz -C /usr/local/bin -f "/tmp/${sb_tar}" supabase; \
+    rm -f "/tmp/${sb_tar}" /tmp/supabase_checksums.txt; \
+    # Vercel CLI (pinned, bun global -> same bin dir as letta, /usr/local/bin)
+    bun install -g "vercel@${VERCEL_VERSION}"; \
     # Composio CLI. Its installer drops the binary + helper files in
     # $HOME/.composio; redirect HOME to /opt so it lands OUTSIDE /root (the
     # volume mounts at /root and would otherwise mask it), then symlink onto
     # PATH. Runtime config/session still uses $HOME/.composio (=/root/.composio,
     # on the volume) so a one-time `composio login` persists across restarts.
+    # NOTE: composio publishes no pinned binary URL; this curl|bash script is its
+    # only supported install. Accepted as a TLS-trusted source (same installer
+    # used on developer machines). Revisit if a versioned artifact is published.
     HOME=/opt sh -c 'curl -fsSL https://composio.dev/install | bash'; \
     ln -sf /opt/.composio/composio /usr/local/bin/composio; \
     # sanity checks (fail the build if any CLI is missing from PATH)
