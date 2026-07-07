@@ -23,7 +23,13 @@ COPY letta-code-version.txt /tmp/letta-code-version.txt
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y git python3 curl wget jq nodejs make g++ unzip; \
+    apt-get install -y git python3 curl wget jq make g++ unzip; \
+    # Node 22 via NodeSource. Node 20 lacks webidl.markAsUncloneable, which the
+    # undici bundled in node-gyp@latest requires to compile node-pty (a native
+    # dependency of letta-code). On Node 20 the letta-code install fails with
+    # "webidl.util.markAsUncloneable is not a function".
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -; \
+    apt-get install -y nodejs; \
     version="${LETTA_CODE_VERSION:-$(cat /tmp/letta-code-version.txt)}"; \
     bun install -g "@letta-ai/letta-code@${version}" "npm@10"; \
     apt-get purge -y make g++; \
