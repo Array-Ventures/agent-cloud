@@ -87,4 +87,4 @@ ENV LETTA_RESTORE_ENABLED_CHANNELS="1"
 # Run the agent's shell work from a volume-backed dir so files persist across
 # restarts. The volume mounts at /root, masking any build-time dir, so the
 # workspace is created at runtime. ~/.letta state already persists via /root.
-CMD ["sh", "-c", "mkdir -p /root/workspace && cd /root/workspace && rm -rf /root/.letta/channels/*/auth/*/.session-lock 2>/dev/null; letta server --env-name \"$ENV_NAME\" --debug --channels whatsapp"]
+CMD ["sh", "-c", "mkdir -p /root/workspace && cd /root/workspace && rm -rf /root/.letta/channels/*/auth/*/.session-lock 2>/dev/null; letta server --env-name \"$ENV_NAME\" --channels whatsapp"]
