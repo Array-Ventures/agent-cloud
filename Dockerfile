@@ -68,6 +68,11 @@ RUN set -eux; \
     rm -f "/tmp/${sb_tar}" /tmp/supabase_checksums.txt; \
     # Vercel CLI (pinned, bun global -> same bin dir as letta, /usr/local/bin)
     bun install -g "vercel@${VERCEL_VERSION}"; \
+    # agent-browser CLI (bun global -> on PATH so the agent uses `agent-browser`
+    # directly instead of falling back to `npx agent-browser`, which re-resolves
+    # every call and refills the volume). Chrome itself is downloaded at runtime
+    # via `agent-browser install` into the /root volume (persists).
+    bun install -g agent-browser; \
     # Composio CLI. Its installer drops the binary + helper files in
     # $HOME/.composio; redirect HOME to /opt so it lands OUTSIDE /root (the
     # volume mounts at /root and would otherwise mask it), then symlink onto
@@ -76,13 +81,16 @@ RUN set -eux; \
     # NOTE: composio publishes no pinned binary URL; this curl|bash script is its
     # only supported install. Accepted as a TLS-trusted source (same installer
     # used on developer machines). Revisit if a versioned artifact is published.
-    HOME=/opt sh -c 'curl -fsSL https://composio.dev/install | bash'; \
+    HOME=/opt COMPOSIO_INSTALL_PLUGINS=0 sh -c 'curl -fsSL https://composio.dev/install | bash'; \
     ln -sf /opt/.composio/composio /usr/local/bin/composio; \
     # sanity checks (fail the build if any CLI is missing from PATH)
-    gh --version; supabase --version; vercel --version; composio --version
+    gh --version; supabase --version; vercel --version; composio --version; agent-browser --version
 
 ENV ENV_NAME="cloud"
 ENV LETTA_RESTORE_ENABLED_CHANNELS="1"
+# Default agent-browser to the persistent profile saved in the workspace so
+# logins/cookies are detected and reused (override per-command with --profile).
+ENV AGENT_BROWSER_PROFILE="/root/workspace/.browser-profiles/array-workspace"
 
 # Run the agent's shell work from a volume-backed dir so files persist across
 # restarts. The volume mounts at /root, masking any build-time dir, so the
