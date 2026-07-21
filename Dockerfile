@@ -91,6 +91,13 @@ ENV LETTA_RESTORE_ENABLED_CHANNELS="1"
 # Default agent-browser to the persistent profile saved in the workspace so
 # logins/cookies are detected and reused (override per-command with --profile).
 ENV AGENT_BROWSER_PROFILE="/root/workspace/.browser-profiles/array-workspace"
+# The agent-browser daemon holds Chrome open indefinitely by default, and the
+# container's cgroup pids.max (1000) counts threads. A few un-closed browser
+# sessions therefore exhaust the PID limit within days, after which nothing can
+# fork ("spawn EAGAIN") and the agent silently loses every shell-backed tool.
+# Shut the daemon (and Chrome) down after 10 minutes idle; it restarts on the
+# next browser command, and the persistent profile above keeps logins intact.
+ENV AGENT_BROWSER_IDLE_TIMEOUT_MS="600000"
 
 # Run the agent's shell work from a volume-backed dir so files persist across
 # restarts. The volume mounts at /root, masking any build-time dir, so the
