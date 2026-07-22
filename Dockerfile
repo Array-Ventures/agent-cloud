@@ -32,6 +32,9 @@ RUN set -eux; \
     apt-get install -y nodejs; \
     version="${LETTA_CODE_VERSION:-$(cat /tmp/letta-code-version.txt)}"; \
     bun install -g "@letta-ai/letta-code@${version}" "npm@10"; \
+    # Pin letta onto /usr/local/bin explicitly (belt-and-suspenders vs bun's
+    # global-bin location). Points at the package's own bin so it stays valid.
+    ln -sf /opt/letta-code/node_modules/.bin/letta /usr/local/bin/letta; \
     apt-get purge -y make g++; \
     apt-get autoremove -y; \
     rm -rf /var/lib/apt/lists/*
@@ -88,6 +91,12 @@ RUN set -eux; \
 
 ENV ENV_NAME="cloud"
 ENV LETTA_RESTORE_ENABLED_CHANNELS="1"
+# Disable letta-code's in-container self-updater. On a production box we run the
+# version baked into the image (pinned via letta-code-version.txt, bumped by CI
+# + rebuild), not a silent in-place update. The self-update rewrote /opt and
+# repeatedly deleted the /usr/local/bin/letta symlink, making `letta` vanish
+# from PATH in ssh sessions. Checked as DISABLE_AUTOUPDATER !== "1".
+ENV DISABLE_AUTOUPDATER="1"
 # Default agent-browser to the persistent profile saved in the workspace so
 # logins/cookies are detected and reused (override per-command with --profile).
 ENV AGENT_BROWSER_PROFILE="/root/workspace/.browser-profiles/array-workspace"
