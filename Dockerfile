@@ -24,6 +24,19 @@ COPY letta-code-version.txt /tmp/letta-code-version.txt
 RUN set -eux; \
     apt-get update; \
     apt-get install -y git python3 curl wget jq make g++ unzip; \
+    # Chrome/Chromium runtime shared libraries. agent-browser downloads Chrome,
+    # but the slim base image ships none of Chrome's GUI/system deps, so it fails
+    # to launch with "libatk-1.0.so.0: cannot open shared object file" and the
+    # authenticated browser profile is unusable (agent falls back to public
+    # sources + re-downloads Playwright). Installed as manual packages so the
+    # autoremove below does not strip them. NOTE: Debian 13 (trixie) t64 names --
+    # libasound2t64 / libatk1.0-0t64 / libatk-bridge2.0-0t64 / libatspi2.0-0t64 /
+    # libcups2t64 (revert to non-t64 names if the base image moves back to bookworm).
+    apt-get install -y --no-install-recommends \
+      libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+      libdrm2 libdbus-1-3 libxcb1 libxkbcommon0 libx11-6 libxcomposite1 \
+      libxdamage1 libxext6 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 \
+      libcairo2 libasound2t64 libatspi2.0-0t64 libxshmfence1 fonts-liberation; \
     # Node 22 via NodeSource. Node 20 lacks webidl.markAsUncloneable, which the
     # undici bundled in node-gyp@latest requires to compile node-pty (a native
     # dependency of letta-code). On Node 20 the letta-code install fails with
