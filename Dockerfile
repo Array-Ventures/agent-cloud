@@ -124,4 +124,11 @@ ENV AGENT_BROWSER_IDLE_TIMEOUT_MS="600000"
 # Run the agent's shell work from a volume-backed dir so files persist across
 # restarts. The volume mounts at /root, masking any build-time dir, so the
 # workspace is created at runtime. ~/.letta state already persists via /root.
-CMD ["sh", "-c", "mkdir -p /root/workspace && cd /root/workspace && rm -rf /root/.letta/channels/*/auth/*/.session-lock 2>/dev/null; letta server --env-name \"$ENV_NAME\" --channels whatsapp"]
+# Clear stale locks left on the volume by the previous container before starting.
+# Railway does stop-then-start on a volume-backed service (only one container can
+# mount the volume), so any lock still present is from a dead process:
+#  - channels/.../.session-lock: WhatsApp/baileys session lease
+#  - listeners/*.lock: letta-code >=0.30 listener lease. If left behind, the new
+#    server aborts with "A letta server for environment ... is already running
+#    (pid N)" and the deploy crash-loops.
+CMD ["sh", "-c", "mkdir -p /root/workspace && cd /root/workspace && rm -rf /root/.letta/channels/*/auth/*/.session-lock /root/.letta/listeners/*.lock 2>/dev/null; letta server --env-name \"$ENV_NAME\" --channels whatsapp"]
